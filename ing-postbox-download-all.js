@@ -23,20 +23,44 @@
     const NAME = "Alle herunterladen";    
 
     const download = async (url, name) => new Promise((res, rej) => {
-      GM_download({ url, name, onprogress: (progress) => {
-        if (progress.status === 200) {
-          setTimeout(() => {
-            res();
-          }, 200);
-        }
-      }, onerror: rej , onabort: rej, ontimeout: rej });
+      const performDownload = () => {
+        GM_download({ url, name: name || 'document.pdf', onprogress: (progress) => {
+          if (progress.status === 200) {
+            setTimeout(() => {
+              res();
+            }, 200);
+          }
+        }, onerror: rej , onabort: rej, ontimeout: rej });
+      };
+
+      // Wenn kein Name vorgegeben, versuche den Originalnamen vom Server zu holen
+      if (!name) {
+        fetch(url, { method: 'HEAD' })
+          .then(response => {
+            const disposition = response.headers.get('content-disposition');
+            if (disposition) {
+              // Versuche verschiedene Formate zu matchen
+              let filenameMatch = disposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+              if (!filenameMatch) {
+                filenameMatch = disposition.match(/filename=(?:"(.+?)"|([^;\s]+))/);
+              }
+              if (filenameMatch) {
+                name = decodeURIComponent(filenameMatch[1] || filenameMatch[2]);
+              }
+            }
+            performDownload();
+          })
+          .catch(() => performDownload());
+      } else {
+        performDownload();
+      }
     });
 
     let abort = false;
     let loading = false;
     const FILENAME_TEMPLATE_KEY = "FILENAME_TEMPLATE";
     const RENAME_FILES_KEY = "RENAME_FILES";
-    let filenameTemplate = GM_getValue(FILENAME_TEMPLATE_KEY, "DD.MM.YYYY_ART_BETREFF");
+    let filenameTemplate = GM_getValue(FILENAME_TEMPLATE_KEY, "YYYY.MM.DD_ART_BETREFF");
     let renameFiles = GM_getValue(RENAME_FILES_KEY, true);
     
     const addButton = (name, onClick) => {
@@ -67,7 +91,7 @@
       if (!['DD', 'MM', 'YYYY', 'ART', 'BETREFF'].every((curr) => {
         return newFilenameTemplate.includes(curr);
       })) {
-        alert('Bitte gib ein Template nach folgendem Muster ein: DD.MM.YYYY_ART_BETREFF');
+        alert('Bitte gib ein Template nach folgendem Muster ein: YYYY.MM.DD_ART_BETREFF');
         return;
       }
       
@@ -118,8 +142,8 @@
                   .replace('ART', nameSegments[0])
                   .replace('BETREFF', nameSegments[1])}.pdf`;
               } else {
-                // Verwende den Betreff als Dateinamen, wenn Umbenennung ausgeschaltet ist
-                name = `${nameSegments[1]}.pdf`;
+                // Kein Name setzen = Originalnamen vom Server verwenden
+                name = null;
               }
 
               const url = "https://banking.ing.de/app/postbox" + $(this).find('a:contains(Download)').first().attr('href').substring(1);
