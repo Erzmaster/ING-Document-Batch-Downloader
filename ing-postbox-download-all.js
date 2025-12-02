@@ -35,7 +35,9 @@
     let abort = false;
     let loading = false;
     const FILENAME_TEMPLATE_KEY = "FILENAME_TEMPLATE";
+    const RENAME_FILES_KEY = "RENAME_FILES";
     let filenameTemplate = GM_getValue(FILENAME_TEMPLATE_KEY, "DD.MM.YYYY_ART_BETREFF");
+    let renameFiles = GM_getValue(RENAME_FILES_KEY, true);
     
     const addButton = (name, onClick) => {
       $('.account-filters').after(VM.createElement("button", {
@@ -71,6 +73,13 @@
       
       GM_setValue(FILENAME_TEMPLATE_KEY, newFilenameTemplate);
       filenameTemplate = newFilenameTemplate;
+    });
+
+    addButton(renameFiles ? "Umbenennung: AN" : "Umbenennung: AUS", async function(event) {
+      event.preventDefault()
+      renameFiles = !renameFiles;
+      GM_setValue(RENAME_FILES_KEY, renameFiles);
+      this.innerHTML = renameFiles ? "Umbenennung: AN" : "Umbenennung: AUS";
     });     
     
     addButton(NAME, async function(event) {
@@ -100,12 +109,18 @@
                 })
                 .get();
 
-              const name = `${filenameTemplate
-                .replace('DD', nameSegments[2].split('_')[0])
-                .replace('MM', nameSegments[2].split('_')[1])
-                .replace('YYYY', nameSegments[2].split('_')[2])
-                .replace('ART', nameSegments[0])
-                .replace('BETREFF', nameSegments[1])}.pdf`;
+              let name;
+              if (renameFiles) {
+                name = `${filenameTemplate
+                  .replace('DD', nameSegments[2].split('_')[0])
+                  .replace('MM', nameSegments[2].split('_')[1])
+                  .replace('YYYY', nameSegments[2].split('_')[2])
+                  .replace('ART', nameSegments[0])
+                  .replace('BETREFF', nameSegments[1])}.pdf`;
+              } else {
+                // Verwende den Betreff als Dateinamen, wenn Umbenennung ausgeschaltet ist
+                name = `${nameSegments[1]}.pdf`;
+              }
 
               const url = "https://banking.ing.de/app/postbox" + $(this).find('a:contains(Download)').first().attr('href').substring(1);
               return { url, name };
@@ -121,7 +136,8 @@
           await download(d.url, d.name);
         }
       } catch (err) {
-        alert("Es ist ein Fehler aufgetreten.", err);
+        console.error("Download Error:", err);
+        alert("Es ist ein Fehler aufgetreten: " + (err.message || err));
       }
 
       abort = false;
